@@ -12,10 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import transforms
 import os
-import platform
-pf = platform.system()
-if pf == 'Darwin':
-    os.environ['KMP_DUPLICATE_LIB_OK']='True'
+
 
 class Model(nn.Module):
     def __init__(self):
@@ -42,13 +39,11 @@ class Model(nn.Module):
         output = F.log_softmax(x, dim=1)
         return output
 
-
 if __name__ == '__main__':
     # parse options
     parser = argparse.ArgumentParser(description='pytorch')
-    parser.add_argument('-w', '--weights', default='./model/janken.pt')
+    parser.add_argument('-m', '--model', default='./model/janken.pth')
     parser.add_argument('-l', '--labels', default='./model/label.txt')
-    parser.add_argument('-d', '--device', default='normal_cam') # normal_cam /jetson_nano_raspi_cam
 
     args = parser.parse_args()
 
@@ -60,23 +55,11 @@ if __name__ == '__main__':
     print(labels)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = Model().to(device)
-    model.load_state_dict(torch.load(args.weights, map_location=device))
+    model = torch.load(args.model, map_location=torch.device(device))
     model.eval()
-    # print(model)
+    print(model)
 
-    if args.device == 'normal_cam':
-        cam = cv2.VideoCapture(0)
-    elif args.device == 'jetson_nano_raspi_cam':
-        GST_STR = 'nvarguscamerasrc \
-            ! video/x-raw(memory:NVMM), width=3280, height=2464, format=(string)NV12, framerate=(fraction)21/1 \
-            ! nvvidconv ! video/x-raw, width=(int)640, height=(int)480, format=(string)BGRx \
-            ! videoconvert \
-            ! appsink'
-        cam = cv2.VideoCapture(GST_STR, cv2.CAP_GSTREAMER) # Raspi cam
-    else:
-        print('wrong device')
-        sys.exit()
+    cam = cv2.VideoCapture(0)
 
     count_max = 0
     count = 0
@@ -97,14 +80,16 @@ if __name__ == '__main__':
             # https://discuss.pytorch.org/t/how-to-classify-single-image-using-loaded-net/1411/29
             image = capture.copy()
             image = cv2.resize(image, (64, 64))
-            loader = transforms.Compose([ transforms.ToTensor()])
+            loader = transforms.Compose([transforms.ToTensor()])
             image = loader(image).float()
             image = image.unsqueeze(0)
             image = image.to(device)
 
             start = time.time()
             output = model(image)
+            print(output)
             preds = output.argmax(dim=1, keepdim=True)
+            print(preds)
             elapsed_time = time.time() - start
 
             pred_label = labels[preds]
@@ -123,3 +108,4 @@ if __name__ == '__main__':
 
     cam.release()
     cv2.destroyAllWindows()
+
